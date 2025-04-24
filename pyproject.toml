@@ -1,0 +1,16 @@
+[project]
+name = "censusalign"
+version = "0.1.0"
+description = "A python toolkit for aligning census data with electoral results"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas>=1.0.1",
+    "pandas>=2.2.3",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "openpyxl>=3.1.5",
+]
