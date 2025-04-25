@@ -1,0 +1,13 @@
+g22_state_sov:
+  url: "https://statewidedatabase.org/pub/data/G22/state/state_g22_sov_data_by_g22_srprec.zip"
+  election:
+    govenor:
+      - "GOVDEM01"
+      - "GOVREP01"
+    senate:
+      - "SENDEM01"
+      - "SENREP01"
+    congressional:
+      - "CONDEM01"
+      - "CONREP01"
+  # The following are the state legislative districts

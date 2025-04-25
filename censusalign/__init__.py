@@ -1,1 +1,1 @@
-from .blockify import Blockify
+from .graphify import Graphify
