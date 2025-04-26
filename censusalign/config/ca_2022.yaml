@@ -3,15 +3,57 @@ conversion_url: "https://statewidedatabase.org/pub/data/G22/state/state_g22_sr_b
 census_url: "https://statewidedatabase.org/ftp/pub/data/CVAP_2024/state/state_CVAP_with_DOJ_2018-2022_by_2020_Blocks.csv"
 shapefile_url: "https://www2.census.gov/geo/tiger/TIGER2020PL/STATE/06_CALIFORNIA/06/tl_2020_06_bg20.zip"
 election:
-  govenor:
+  governor:
     - "GOVDEM01"
     - "GOVREP01"
+
   senate:
     - "SENDEM01"
     - "SENREP01"
+
   congressional:
     - "CONDEM01"
     - "CONREP01"
+
+  lieutenant_governor:
+    - "LTGDEM01"
+    - "LTGREP01"
+
+  attorney_general:
+    - "ATGDEM01"
+    - "ATGREP01"
+
+  secretary_of_state:
+    - "SOSDEM01"
+    - "SOSREP01"
+
+  treasurer:
+    - "TRSDEM01"
+    - "TRSREP01"
+
+  insurance_commissioner:
+    - "INSDEM01"
+    - "INSREP01"
+
+  board_of_equalization:
+    - "BOEDEM01"
+    - "BOEREP01"
+
+  state_assembly:
+    - "ASSDEM01"
+    - "ASSREP01"
+
+  us_president:
+    - "USPDEM01"
+    - "USPREP01"
+
+  us_senate:
+    - "USSDEM01"
+    - "USSREP01"
+
+  congressional_alt:
+    - "CNGDEM01"
+    - "CNGREP01"
 # g18_state_sov:
 #   url: "https://statewidedatabase.org/pub/data/G18/state/state_g18_sov_data_by_g18_srprec.zip"
 #   election:

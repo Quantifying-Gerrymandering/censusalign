@@ -9,7 +9,7 @@ import geopandas as gpd
 import importlib.resources
 
 
-class DataFetcher:
+class Harvest:
     """A utility class for fetching and loading various datasets (vote data, conversion data,
     census data, and shapefile data) from URLs specified in a YAML configuration file.
 
@@ -56,9 +56,12 @@ class DataFetcher:
         Raises:
             ValueError: If the year is not 2022.
         """
+
+        # TODO: Add support for other years
         if year != 2022:
             raise ValueError("Only the year 2022 is supported at this time.")
 
+        self.year = year
         self.config = self._load_config(year)
 
         self.vote_url = self.config["SRPREC_vote_url"]
@@ -72,6 +75,31 @@ class DataFetcher:
         )
         with yaml_file.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
+
+    def fetch_and_store(self, out_dir: str):
+        """
+        Fetches the data from the URLs specified in the YAML config and stores them as local files.
+        The files are saved in the specified output directory, which is created if it doesn't exist.
+
+        Args:
+            out_dir (str): The directory where the data files will be stored.
+        """
+        os.makedirs(out_dir, exist_ok=True)
+
+        vote_df = self.load_vote()
+        conversion_df = self.load_conversion()
+        census_df = self.load_census()
+        shapefile_gdf = self.load_shapefile()
+
+        vote_df.to_csv(os.path.join(out_dir, f"vote_data_{self.year}.csv"), index=False)
+        conversion_df.to_csv(
+            os.path.join(out_dir, f"conversion_data_{self.year}.csv"),
+            index=False,
+        )
+        census_df.to_csv(
+            os.path.join(out_dir, f"census_data_{self.year}.csv"), index=False
+        )
+        shapefile_gdf.to_file(os.path.join(out_dir, f"shapefile_data_{self.year}.shp"))
 
     def load_vote(self) -> pd.DataFrame:
         """
