@@ -1,41 +1,109 @@
-import os
+import sys
+import yaml
 import numpy as np
 import pandas as pd
 import networkx as nx
 import geopandas as gpd
+from .harvest import Harvest
+import importlib.resources
 from gerrychain import Graph
 
 
-class Graphify:
+class Cultivate:
     """
-    Transforms, cleans, combines, and aggregates shapefile, elections, and population data and converts to a graph format.
+    The `Cultivate` class is designed to process, clean, and transform election, population,
+    and geographic data into a graph format. It provides methods for aggregating election
+    data to various geographic levels, merging population data with geographic shapes, and
+    creating graph representations of the data.
+
+    Attributes:
+        election_df (pd.DataFrame): DataFrame containing election data with columns for
+            precinct keys and vote counts for Democratic and Republican candidates.
+        conversion_df (pd.DataFrame): DataFrame containing conversion data mapping precinct
+            keys to census block keys, along with registration data.
+
+    Methods:
+        __init__(election_file: str, conversion_file: str):
+            Initializes the `Cultivate` object by loading and preprocessing election and
+            conversion data from the specified CSV files.
+
+        hamilton_floor(values: pd.Series) -> pd.Series:
+            Applies Hamilton rounding to a series of values, ensuring that the sum of the
+            rounded values matches the sum of the original values.
+
+        blockify(level: str = "blockgroup") -> pd.DataFrame:
+            Aggregates precinct-level election data to a specified census geography level
+            (e.g., block, blockgroup, tract, or county) and returns the aggregated data.
+
+        merge_population_and_geometry(shape_path: str, blockfile_path: str) -> gpd.GeoDataFrame:
+            Merges population data from a block-level CSV file with geographic shapes from
+            a shapefile, returning a GeoDataFrame with population and geometry data.
+
+        graphify(shape_path: str, blockfile_path: str, level: str = "blockgroup", custom_edges: list) -> nx.Graph:
+            Creates a graph representation of the election data aggregated to the specified
+            geographic level, optionally adding custom edges between specified geographic units.
+
+        _add_edge_by_geoid(graph: nx.Graph, gdf: gpd.GeoDataFrame, geoid1: str, geoid2: str):
+            Adds an edge to the graph between two geographic units identified by their GEOID20
+            values, if both units are present in the GeoDataFrame.
     """
 
-    def __init__(self, election_file: str, conversion_file: str):
-        if not os.path.exists(election_file):
-            raise FileNotFoundError(f"Election file not found: {election_file}")
-        if not os.path.exists(conversion_file):
-            raise FileNotFoundError(f"Conversion file not found: {conversion_file}")
+    def __init__(
+        self,
+        year: str = "2022",
+        election: str = "governor",
+    ):
+        """
+        Initialize Cultivate.
 
-        self.election_df = pd.read_csv(election_file, dtype={"SRPREC_KEY": str})
-        self.election_df = self.election_df[
-            ["SRPREC_KEY", "GOVDEM01", "GOVREP01"]
-        ].copy()
+        Args:
+            year (str, optional): Year to fetch if files are not provided. Defaults to "2022".
+            election:
+        """
+
+        self.config = self._load_config(year)
+        harvester = Harvest(year=year)
+        self._print_status(f"Loading election data")
+        self.election_df = harvester.load_vote()
+        self._clear_status()
+        self._print_status(
+            f"Loading conversion data",
+        )
+        self.conversion_df = harvester.load_conversion()
+        self._clear_status()
+        self._print_status(f"Loading census data")
+        self.census_df = harvester.load_census()
+        self._clear_status()
+        self._print_status(f"Loading shapefile data")
+        self.shapefile_df = harvester.load_shapefile()
+        self._clear_status()
+
+        self.year = year
+
+        # ➔ Pull election columns from config
+        election_columns = self.config["election"][election]
+
+        # Always include SRPREC_KEY
+        subset_columns = ["SRPREC_KEY"] + election_columns
+
+        # Process election data
+        self.election_df = self.election_df[subset_columns].copy()
         self.election_df.rename(
-            columns={"GOVDEM01": "dem", "GOVREP01": "rep"}, inplace=True
+            columns={
+                election_columns[0]: "dem",
+                election_columns[1]: "rep",
+            },
+            inplace=True,
         )
         self.election_df[["dem", "rep"]] = self.election_df[["dem", "rep"]].astype(int)
+        self._print_status("All data loaded successfully!")
 
-        self.conversion_df = pd.read_csv(
-            conversion_file, dtype={"SRPREC_KEY": str, "BLOCK_KEY": str}
+    def _load_config(self, year):
+        yaml_file = importlib.resources.files("censusalign.config").joinpath(
+            f"ca_{year}.yaml"
         )
-        self.conversion_df = self.conversion_df[
-            self.conversion_df["SRPREC_KEY"].notna()
-            & self.conversion_df["BLOCK_KEY"].notna()
-        ].copy()
-        self.conversion_df[["BLKREG", "SRTOTREG"]] = self.conversion_df[
-            ["BLKREG", "SRTOTREG"]
-        ].astype(float)
+        with yaml_file.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
 
     @staticmethod
     def hamilton_floor(values: pd.Series) -> pd.Series:
@@ -90,26 +158,18 @@ class Graphify:
         block_votes["tot"] = block_votes["dem"] + block_votes["rep"]
 
         # Remove water-only blocks (block groups ending in '0')
-        block_votes["blockgroup"] = block_votes["BLOCK_KEY"].str[:12]
+        block_votes["BLOCK_KEY"] = block_votes["BLOCK_KEY"].astype(str)
+        block_votes["blockgroup"] = block_votes["BLOCK_KEY"].str[:11]
         block_df = block_votes[block_votes["blockgroup"].str[-1] != "0"].copy()
         block_df = block_df[["BLOCK_KEY", "tot", "dem", "rep"]].sort_values("BLOCK_KEY")
 
         geoid_col = f"GEOID_{level}"
         # Handle aggregation level
-        if level == "block":
-            block_df[geoid_col] = block_df["BLOCK_KEY"]
-            return block_df
         if level == "blockgroup":
-            block_df[geoid_col] = block_df["BLOCK_KEY"].str[:12]
-        elif level == "tract":
-            geoid_col = "GEOID_TRACT"
             block_df[geoid_col] = block_df["BLOCK_KEY"].str[:11]
-        elif level == "county":
-            geoid_col = "GEOID_COUNTY"
-            block_df[geoid_col] = block_df["BLOCK_KEY"].str[:5]
         else:
             raise ValueError(
-                "Invalid level. Choose from 'block', 'blockgroup', 'tract', or 'county'."
+                "Invalid level. Only 'blockgroup', supported at this time."
             )
 
         # Aggregate and return
@@ -126,26 +186,17 @@ class Graphify:
             geoid_col
         )
 
-    def merge_population_and_geometry(
-        self,
-        shape_path: str,
-        blockfile_path: str,
-    ) -> gpd.GeoDataFrame:
+    def merge_population_and_geometry(self) -> gpd.GeoDataFrame:
         """
         Merges population data from a block-level CSV file with geographic shapes from a shapefile.
-
-        Args:
-            shape_path (str): Path to the shapefile containing geographic shapes.
-            blockfile_path (str): Path to the CSV file containing block-level population data.
 
         Returns:
             gpd.GeoDataFrame: A GeoDataFrame containing merged population and geometry data,
                               with columns ['GEOID20', 'geometry', 'FIPS', 'pop_total'].
         """
-        block_df = pd.read_csv(blockfile_path)
-        gdf = gpd.read_file(shape_path)[
-            ["GEOID20", "geometry", "STATEFP20", "COUNTYFP20"]
-        ]
+        gdf = self.shapefile_df.copy()
+        block_df = self.census_df.copy()
+
         gdf["geometry"] = gdf["geometry"].buffer(0)
         gdf["FIPS"] = gdf["STATEFP20"] + gdf["COUNTYFP20"]
         gdf.drop(["STATEFP20", "COUNTYFP20"], axis=1, inplace=True)
@@ -164,10 +215,8 @@ class Graphify:
         gdf = gdf.to_crs(3310)
         return gdf.sort_values(by="GEOID20").reset_index(drop=True)
 
-    def create(
+    def graphify(
         self,
-        shape_path,
-        blockfile_path,
         level: str = "blockgroup",
         custom_edges: list = [
             # Named connections
@@ -192,19 +241,6 @@ class Graphify:
             ("060375775011", "060375776041"),
             ("060590630051", "060590630061"),
             ("060590635001", "060590629001"),
-            # District connection fixes
-            ("060839801001", "061110025003"),
-            ("060375991001", "060375990001"),
-            ("060990008061", "060952506042"),  # District 4
-            ("060990009082", "060710103002"),  # District 7
-            ("060770021001", "060750132002"),  # District 9
-            ("060759804011", "060750171011"),  # District 22
-            ("060990005063", "060050003011"),  # District 25
-            ("060770051332", "060372371012"),  # District 27
-            ("060990019002", "060650408092"),  # District 39
-            ("060990004042", "060190041002"),  # District 43
-            ("060770022012", "060530118022"),  # District 43 (additional)
-            ("060990010022", "060371434013"),  # District 44
         ],
     ) -> nx.Graph:
         """
@@ -216,18 +252,21 @@ class Graphify:
         Returns:
             An nx.Graph object representing the election data at the specified level.
         """
-        block_df = self.blockify(level)
+        self._print_status(f"Blockifying election data")
+        vote_by_block_df = self.blockify(level="blockgroup")
         geoid_col = f"GEOID_{level}"
-        block_df.rename(columns={geoid_col: "GEOID20"}, inplace=True)
-
-        gdf = self.merge_population_and_geometry(shape_path, blockfile_path)
-
+        vote_by_block_df.rename(columns={geoid_col: "GEOID20"}, inplace=True)
+        vote_by_block_df["GEOID20"] = "0" + vote_by_block_df["GEOID20"]
+        self._clear_status()
+        self._print_status(f"Merging population and geometry data")
+        gdf = self.merge_population_and_geometry()
         gdf = pd.merge(
             gdf,
-            block_df,
+            vote_by_block_df,
             on="GEOID20",
             how="inner",
         )
+        self._clear_status()
 
         graph = Graph.from_geodataframe(gdf, ignore_errors=False)
         for geoid1, geoid2 in custom_edges:
@@ -235,11 +274,28 @@ class Graphify:
 
         return graph
 
-    def _add_edge_by_geoid(self, graph, gdf, geoid1, geoid2):
+    def _add_edge_by_geoid(self, graph, gdf, geoid1, geoid2, warnings=False):
         """Add edge to the graph using GEOID20 values."""
         try:
             index1 = gdf.index[gdf["GEOID20"] == geoid1].tolist()[0]
             index2 = gdf.index[gdf["GEOID20"] == geoid2].tolist()[0]
             graph.add_edge(index1, index2)
         except IndexError:
-            print(f"Warning: One of the GEOIDs {geoid1}, {geoid2} not found in gdf.")
+            if warnings:
+                print(
+                    f"Warning: One of the GEOIDs {geoid1}, {geoid2} not found in gdf."
+                )
+
+    def _print_status(self, message: str):
+        """
+        Print a status message that stays on the same line.
+        """
+        sys.stdout.write(f"\r{message}")
+        sys.stdout.flush()
+
+    def _clear_status(self):
+        """
+        Clear the current line from the terminal.
+        """
+        sys.stdout.write("\r" + " " * 100 + "\r")
+        sys.stdout.flush()
