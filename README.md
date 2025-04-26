@@ -28,6 +28,8 @@ To get started with CensusAlign, follow these steps:
 2. Install the required dependencies using `uv`:
 
    ```bash
+   uv venv
+   source .venv/bin/activate
    uv pip install -r pyproject.toml
    ```
 
