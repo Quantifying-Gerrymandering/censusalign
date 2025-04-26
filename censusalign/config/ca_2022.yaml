@@ -1,0 +1,27 @@
+SRPREC_vote_url: "https://statewidedatabase.org/pub/data/G22/state/state_g22_sov_data_by_g22_srprec.zip"
+conversion_url: "https://statewidedatabase.org/pub/data/G22/state/state_g22_sr_blk_map.csv"
+census_url: "https://statewidedatabase.org/ftp/pub/data/CVAP_2024/state/state_CVAP_with_DOJ_2018-2022_by_2020_Blocks.csv"
+shapefile_url: "https://www2.census.gov/geo/tiger/TIGER2020PL/STATE/06_CALIFORNIA/06/tl_2020_06_bg20.zip"
+election:
+  govenor:
+    - "GOVDEM01"
+    - "GOVREP01"
+  senate:
+    - "SENDEM01"
+    - "SENREP01"
+  congressional:
+    - "CONDEM01"
+    - "CONREP01"
+# g18_state_sov:
+#   url: "https://statewidedatabase.org/pub/data/G18/state/state_g18_sov_data_by_g18_srprec.zip"
+#   election:
+#     govenor:
+#       - "GOVDEM01"
+#       - "GOVREP01"
+#     senate:
+#       - "SENDEM01"
+#       - "SENREP01"
+#     congressional:
+#       - "CONDEM01"
+#       - "CONREP01"
+#   # The following are the state legislative districts
